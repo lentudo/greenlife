@@ -1,5 +1,9 @@
 package ittepic.edu.mx.greenlife
 
-import io.flutter.embedding.android.FlutterActivity
+// ¡Cambiamos la clase importada!
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+// ¡Cambiamos la clase de la que hereda!
+class MainActivity : FlutterFragmentActivity() {
+
+}
