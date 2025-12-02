@@ -114,15 +114,20 @@ class NotificationService {
     );
   }
 
+// --- LÓGICA DE RECORDATORIOS (CUIDADO DE PLANTAS) ---
+
   Future<void> schedulePlantReminder({
     required int id,
     required String title,
     required String body,
     required DateTime scheduleTime,
   }) async {
+
+    // CORRECCIÓN: Convertimos la fecha a UTC para evitar errores de zona horaria.
+    // Esto asegura que "dentro de 10 segundos" sea REALMENTE dentro de 10 segundos.
     final tz.TZDateTime scheduledDate = tz.TZDateTime.from(
-      scheduleTime,
-      tz.local,
+      scheduleTime.toUtc(),
+      tz.UTC,
     );
 
     await _flutterLocalNotificationsPlugin.zonedSchedule(
@@ -132,21 +137,46 @@ class NotificationService {
       scheduledDate,
       const NotificationDetails(
         android: AndroidNotificationDetails(
-          'plant_care_channel',
-          'Recordatorios de Riego',
+          'plant_care_channel_v99', // <--- ¡CAMBIA ESTO! Ponle v99 o lo que quieras
+          'Recordatorios de Riego', // Nombre visible en ajustes
           channelDescription: 'Canal para recordatorios de cuidado de plantas',
-          importance: Importance.max,
-          priority: Priority.high,
+          importance: Importance.max, // ¡IMPORTANTE!
+          priority: Priority.high,    // ¡IMPORTANTE!
+          playSound: true,            // Asegura que suene
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
       UILocalNotificationDateInterpretation.absoluteTime,
     );
-    print("🌱 Recordatorio programado para: $scheduledDate");
+
+    print("🌱 Recordatorio programado en UTC para: $scheduledDate");
   }
 
   Future<void> cancelNotification(int id) async {
     await _flutterLocalNotificationsPlugin.cancel(id);
+  }
+  // --- FUNCIÓN DE PRUEBA INMEDIATA ---
+  Future<void> showInstantNotification() async {
+    const AndroidNotificationDetails androidNotificationDetails =
+    AndroidNotificationDetails(
+      'test_channel_id', // ID diferente para probar
+      'Canal de Prueba',
+      channelDescription: 'Este canal es para probar que las alertas funcionan',
+      importance: Importance.max, // ¡IMPORTANCIA MÁXIMA!
+      priority: Priority.high,    // ¡PRIORIDAD ALTA!
+      ticker: 'ticker',
+    );
+
+    const NotificationDetails notificationDetails =
+    NotificationDetails(android: androidNotificationDetails);
+
+    await _flutterLocalNotificationsPlugin.show(
+      888, // ID fijo para pruebas
+      '🔔 ¡Ding Dong!',
+      '¡El sistema de notificaciones está funcionando!',
+      notificationDetails,
+    );
   }
 }

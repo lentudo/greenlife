@@ -36,40 +36,51 @@ class _DetallePlantaScreenState extends State<DetallePlantaScreen> {
     return "Faltan $diferencia días";
   }
 
-  // Función para Regar (Actualizar BD + Programar Notificación)
+  // Función Blindada para Regar
   Future<void> _regarPlanta() async {
     setState(() => _isLoading = true);
-    try {
-      final nuevoRiego = DateTime.now();
 
-      // 1. Actualizar en Firebase
+    final nuevoRiego = DateTime.now();
+
+    // --- 1. INTENTO DE FIREBASE (Puede fallar si no hay internet) ---
+    try {
       await FirebaseFirestore.instance
           .collection('plantas')
           .doc(_planta.id)
           .update({
         'ultimoRiego': Timestamp.fromDate(nuevoRiego),
       });
+      print("✅ Firebase actualizado correctamente");
+    } catch (e) {
+      print("⚠️ Error de conexión con Firebase (Ignorado): $e");
+      print("⏩ Continuamos con la notificación aunque no haya internet...");
+    }
 
-      // ---------------------------------------------------------
-      // 2. FASE 3: PROGRAMAR LA NOTIFICACIÓN LOCAL
-      // ---------------------------------------------------------
-
-      // Calculamos la fecha futura: Hoy + Frecuencia de días
+    // --- 2. NOTIFICACIÓN (Esto SÍ debe funcionar) ---
+    try {
       final proximoRiegoDate = nuevoRiego.add(Duration(days: _planta.frecuenciaRiego));
 
       await NotificationService.instance.schedulePlantReminder(
-        // Usamos hashCode para convertir el ID String de Firebase a un Int único
         id: _planta.id.hashCode,
         title: '🌱 Hora de regar: ${_planta.nombre}',
-        body: 'Han pasado ${_planta.frecuenciaRiego} días. Tu ${_planta.tipo} necesita agua.',
+        body: 'Tu ${_planta.tipo} necesita agua.',
         scheduleTime: proximoRiegoDate,
       );
 
-      print("🔔 Notificación programada para: $proximoRiegoDate");
-      // ---------------------------------------------------------
+      print("🔔 ¡ÉXITO! Notificación programada para: $proximoRiegoDate");
 
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recordatorio programado (Espera 1 min)')),
+      );
+
+    } catch (e) {
+      print("❌ Error fatal en notificación: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error notif: $e')),
+      );
+    } finally {
+      // Actualizamos la UI localmente aunque Firebase haya fallado
       setState(() {
-        // Actualizamos el modelo local para ver el cambio inmediato
         _planta = PlantaModel(
           id: _planta.id,
           usuarioId: _planta.usuarioId,
@@ -82,17 +93,8 @@ class _DetallePlantaScreenState extends State<DetallePlantaScreen> {
           creadoEn: _planta.creadoEn,
           coordenadas: _planta.coordenadas,
         );
+        _isLoading = false;
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('¡Riego registrado! Te avisaremos el ${DateFormat('dd/MM').format(proximoRiegoDate)}')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al regar: $e')),
-      );
-    } finally {
-      setState(() => _isLoading = false);
     }
   }
 
@@ -213,6 +215,20 @@ class _DetallePlantaScreenState extends State<DetallePlantaScreen> {
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text("REGAR AHORA", style: TextStyle(color: Colors.white, fontSize: 18)),
                     ),
+                  ),
+                  const SizedBox(height: 20), // Espacio
+
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent, // Rojo para distinguir
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () async {
+                      // Llamamos a la nueva función
+                      await NotificationService.instance.showInstantNotification();
+                    },
+                    icon: const Icon(Icons.notifications_active),
+                    label: const Text("PROBAR NOTIFICACIÓN YA"),
                   ),
                 ],
               ),
