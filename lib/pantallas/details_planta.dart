@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Asegúrate de tener intl en pubspec o usa formateo simple
+import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/planta_model.dart';
+// 1. IMPORTAMOS EL SERVICIO DE NOTIFICACIONES
+import '../services/notification_service.dart';
 
 class DetallePlantaScreen extends StatefulWidget {
   final PlantaModel planta;
@@ -22,7 +24,7 @@ class _DetallePlantaScreenState extends State<DetallePlantaScreen> {
     _planta = widget.planta;
   }
 
-  // Lógica para calcular el próximo riego
+  // Lógica para calcular el próximo riego (Solo texto visual)
   String _calcularProximoRiego() {
     final fechaProximo = _planta.ultimoRiego.add(Duration(days: _planta.frecuenciaRiego));
     final hoy = DateTime.now();
@@ -34,18 +36,37 @@ class _DetallePlantaScreenState extends State<DetallePlantaScreen> {
     return "Faltan $diferencia días";
   }
 
-  // Función para Regar (Actualizar BD)
+  // Función para Regar (Actualizar BD + Programar Notificación)
   Future<void> _regarPlanta() async {
     setState(() => _isLoading = true);
     try {
       final nuevoRiego = DateTime.now();
 
+      // 1. Actualizar en Firebase
       await FirebaseFirestore.instance
           .collection('plantas')
           .doc(_planta.id)
           .update({
         'ultimoRiego': Timestamp.fromDate(nuevoRiego),
       });
+
+      // ---------------------------------------------------------
+      // 2. FASE 3: PROGRAMAR LA NOTIFICACIÓN LOCAL
+      // ---------------------------------------------------------
+
+      // Calculamos la fecha futura: Hoy + Frecuencia de días
+      final proximoRiegoDate = nuevoRiego.add(Duration(days: _planta.frecuenciaRiego));
+
+      await NotificationService.instance.schedulePlantReminder(
+        // Usamos hashCode para convertir el ID String de Firebase a un Int único
+        id: _planta.id.hashCode,
+        title: '🌱 Hora de regar: ${_planta.nombre}',
+        body: 'Han pasado ${_planta.frecuenciaRiego} días. Tu ${_planta.tipo} necesita agua.',
+        scheduleTime: proximoRiegoDate,
+      );
+
+      print("🔔 Notificación programada para: $proximoRiegoDate");
+      // ---------------------------------------------------------
 
       setState(() {
         // Actualizamos el modelo local para ver el cambio inmediato
@@ -57,14 +78,14 @@ class _DetallePlantaScreenState extends State<DetallePlantaScreen> {
           ubicacion: _planta.ubicacion,
           imagenUrl: _planta.imagenUrl,
           frecuenciaRiego: _planta.frecuenciaRiego,
-          ultimoRiego: nuevoRiego, // <--- Actualizado
+          ultimoRiego: nuevoRiego,
           creadoEn: _planta.creadoEn,
           coordenadas: _planta.coordenadas,
         );
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('¡Planta regada con éxito! 💧')),
+        SnackBar(content: Text('¡Riego registrado! Te avisaremos el ${DateFormat('dd/MM').format(proximoRiegoDate)}')),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -91,7 +112,7 @@ class _DetallePlantaScreenState extends State<DetallePlantaScreen> {
           children: [
             // FOTO GRANDE
             Hero(
-              tag: _planta.id, // Animación bonita desde el Home
+              tag: _planta.id,
               child: Container(
                 height: 300,
                 width: double.infinity,
